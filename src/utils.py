@@ -7,7 +7,7 @@ class ClipboardManager:
     def get_content() -> str:
         """Reads text from the clipboard"""
         try:    
-            result = subprocess.run(['wl_paste', '-n'], capture_output=True, text=True)
+            result = subprocess.run(['wl-paste'], capture_output=True, text=True)
             return result.stdout if result.returncode == 0 else ""
         except Exception as e:
             return f"Error: {e}"
@@ -16,6 +16,8 @@ class ClipboardManager:
     def set_content(text: str):
         """Writes text to the clipboard"""
         try:
-            subprocess.run(['wl_copy'], input=text, text=True, check=True)
+            subprocess.run(['wl-copy'], input=text, text=True, check=True)
         except Exception as e:
             return f"Error writing to clipboard: {e}"
+
+
