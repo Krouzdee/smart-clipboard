@@ -4,7 +4,7 @@ import time
 def main():
 
     last_text = ClipB.get_content()
-    print(last_text)
+
     try:
         while True:
             current_text = ClipB.get_content()
