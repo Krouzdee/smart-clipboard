@@ -1,6 +1,6 @@
 import subprocess
 
-class ClipboardManager:
+class ClipboardUtils:
     """Tools for working with the system buffer"""
 
     @staticmethod

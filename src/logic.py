@@ -1,0 +1,87 @@
+import sqlite3
+import re
+from datetime import datetime
+
+class ClipboardManager:
+    def __init__(self, db_path="data/history.db"):
+        self.db_path = db_path
+        self.init_database()
+
+    def init_database(self):
+        db = sqlite3.connect(self.db_path)
+        cursor = db.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                content TEXT NOT NULL,
+                type TEXT NOT NULL DEFAULT 'text',
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        cursor.execute(
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_content_type ON history(content, type)'
+        )
+        
+        db.commit()
+        db.close()
+    
+    def add_to_db(self, text, max_records=50):
+        content_type = self.get_type_content(text)
+
+        try:
+            db = sqlite3.connect(self.db_path)
+            cursor = db.cursor()
+
+            cursor.execute(
+                "INSERT INTO history (content, type) VALUES (?, ?)",
+                (text, content_type)
+            )
+
+            cursor.execute('''
+                DELETE FROM history
+                WHERE id NOT IN (
+                    SELECT id FROM history
+                    ORDER BY timestamp DESC
+                    LIMIT ?
+                )
+              
+            ''', (max_records,))
+
+            db.commit()
+            db.close()
+            return True
+        except sqlite3.IntegrityError:
+            db.close()
+            return False
+
+    def get_history(self, limit=50):
+        db = sqlite3.connect(self.db_path)
+        cursor = db.cursor()
+        cursor.execute(
+            "SELECT content, type, timestamp FROM history ORDER BY timestamp DESC LIMIT ?",
+            (limit,)
+        )
+
+        records = cursor.fetchall()
+        db.close()
+        return records
+
+    def get_type_content(self, text):
+        if self.is_url(text):
+            return 'url'
+        elif self.is_color(text):
+            return 'color'
+        else:
+            return 'text'
+
+    @staticmethod
+    def is_url(text):
+        pattern = r"^https?://[^\s]+$"
+        return bool(re.match(pattern, text))
+    
+    @staticmethod
+    def is_color(text):
+        hex_pattern = r"#(?:[0-9a-fA-F]{3,4}){1,2}\b"
+        rgb_pattern = r"rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*[\d.]+\s*)?\)"
+        return bool(re.match(hex_pattern, text) or re.match(rgb_pattern, text))
