@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 import os
 from datetime import datetime
+import subprocess
 
 def get_db_path():
     data_dir = os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
@@ -82,6 +83,15 @@ class ClipboardManager:
             return 'color'
         else:
             return 'text'
+            
+    @staticmethod
+    def format_entry(content, content_type):
+        """Formatting based on content type"""
+        if content_type == 'url':
+            return f"[URL] {content}"
+        elif content_type == 'color':
+            return f"[COLOR] {content}"
+        return content
 
     @staticmethod
     def set_content(text: str):

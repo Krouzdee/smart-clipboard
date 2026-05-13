@@ -1,18 +1,9 @@
 import sys
 import argparse
 import logging
-import subprocess
-from logic import ClipboardManager
-from prompt_toolkit.shortcuts import radiolist_dialog
-from rich.text import Text
 
-def format_entry(content, content_type):
-    """Formatting based on content type"""
-    if content_type == 'url':
-        return f"[URL] {content}"
-    elif content_type == 'color':
-        return f"[COLOR] ■ {content}"
-    return content
+from logic import ClipboardManager
+
 
 def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
@@ -34,30 +25,141 @@ def main():
         sys.exit(0)
 
     else:
+
         history = manager.get_history(limit=args.limit)
 
         if not history:
             print("Clipboard history is empty.")
             sys.exit(0)
 
-        menu_items = []
+        all_items = []
+
         for content, content_type, timestamp in history:
-            if args.search and args.search.lower() not in content.lower():
-                continue
-            
-            display_text = format_entry(content, content_type)
+            display_text = manager.format_entry(content, content_type)
+            all_items.append((content, display_text))
 
-            menu_items.append([content, display_text])
+
+        # --- Interface settings
+
+        search_text = ""
+        selected_index = 0        
         
-        if not menu_items:
-            print(f"Nothing found for '{args.search}'.")
-            sys.exit(0)
+        def get_filtered_items():
+            if not search_text:
+                return all_items
+            return [(c, d) for c, d in all_items if search_text.lower() in c.lower()]
 
-        selected = radiolist_dialog(title="Smart Clipboard", text="Select the entry (Enter - copy, Esc - exit):", values=menu_items).run()
 
-        if selected:
-            manager.set_content(selected)
-            print("Copied to clipboard!")
+        # --- Creating Interface Components ---
 
-        if __name__ == "__main__":
-            main()
+        from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
+        from prompt_toolkit.layout.containers import Window, HSplit
+        from prompt_toolkit.buffer import Buffer
+
+
+        search_buffer = Buffer()
+
+        def on_search_change(_):
+            nonlocal search_text, selected_index
+            search_text = search_buffer.text
+            selected_index = 0
+
+            update_list_display()
+
+
+        search_buffer.on_text_changed = on_search_change
+
+
+        search_window = Window(content=BufferControl(buffer=search_buffer, focusable=True), height=1, style="class:search")
+
+        list_control = FormattedTextControl(text="")
+        list_window = Window(content=list_control)
+
+
+        def update_list_display():
+            items = get_filtered_items()
+
+            if not items:
+                list_control.text = [("class:dim", "No matches found")]
+                return
+
+            formatted_lines = []
+            for i, (_, display) in enumerate(items):
+                if i == selected_index:
+                    formatted_lines.append(("ansigreen", "→ ")) 
+                    formatted_lines.append(("ansigreen", display))
+                else:
+                    formatted_lines.append(("", "  "))
+                    formatted_lines.append(("", display))
+                
+                # Перенос строки добавляется как отдельный элемент
+                formatted_lines.append(("", "\n"))
+
+            # Удаляем последний лишний перенос строки
+            if formatted_lines:
+                formatted_lines.pop()
+
+            list_control.text = formatted_lines
+                
+
+        root_container = HSplit([search_window, list_window])
+
+        # --- Key settings ---
+
+        from prompt_toolkit.key_binding import KeyBindings
+        from prompt_toolkit.keys import Keys
+
+
+        kb = KeyBindings()
+
+        @kb.add("down")
+        def _(event):
+            nonlocal selected_index
+            items = get_filtered_items()
+            if items:
+                selected_index = (selected_index + 1) % len(items)
+                update_list_display()
+        
+        @kb.add("up")
+        def _(event):
+            nonlocal selected_index
+            items = get_filtered_items()
+            if items:
+                selected_index = (selected_index - 1) % len(items)
+                update_list_display()
+
+        @kb.add("enter")
+        def _(event):
+            nonlocal selected_index
+            items = get_filtered_items()
+            if items and selected_index < len(items):
+                selected_content = items[selected_index][0]
+                event.app.exit(result=selected_content)
+
+        @kb.add("escape")
+        def _(event):
+            event.app.exit(result=None)
+
+
+
+        # --- Launching the application ---
+
+        from prompt_toolkit.layout import Layout
+        from prompt_toolkit import Application
+
+        layout = Layout(root_container, focused_element=search_window)
+
+        app = Application(layout=layout, key_bindings=kb, full_screen=False, mouse_support=False, erase_when_done=True)
+
+        if args.search:
+            search_buffer.text = args.search
+            on_search_change(None)
+
+        update_list_display()
+
+        result = app.run()
+
+
+        if result:
+            manager.set_content(result)
+            print("Copied!")
