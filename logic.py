@@ -1,10 +1,18 @@
 import sqlite3
 import re
+from pathlib import Path
+import os
 from datetime import datetime
 
+def get_db_path():
+    data_dir = os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
+    path = Path(data_dir) / "smclip"
+    path.mkdir(parents=True, exist_ok=True)
+    return str(path / "history.db")
+
 class ClipboardManager:
-    def __init__(self, db_path="data/history.db"):
-        self.db_path = db_path
+    def __init__(self, db_path=None):
+        self.db_path = db_path or get_db_path()
         self.init_database()
 
     def init_database(self):
@@ -74,6 +82,14 @@ class ClipboardManager:
             return 'color'
         else:
             return 'text'
+
+    @staticmethod
+    def set_content(text: str):
+        """Writes text to the clipboard"""
+        try:
+            subprocess.run(['wl-copy'], input=text, text=True, check=True)
+        except Exception as e:
+            return f"Error writing to clipboard: {e}"
 
     @staticmethod
     def is_url(text):
